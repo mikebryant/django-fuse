@@ -49,15 +49,15 @@ def render(fn):
 class DjangoFs(fuse.Fuse):
     @render
     def getattr(self, response):
-        return response.getattr()
+        return response.getattr(self)
 
     @render
     def readdir(self, response, offset):
-        return response.readdir()
+        return response.readdir(self)
 
     @render
     def open(self, response, flags):
-        return response.open(flags)
+        return response.open(self, flags)
 
     @render
     def unlink(self, response):
@@ -75,7 +75,7 @@ class DjangoFs(fuse.Fuse):
 
     @render
     def readlink(self, response):
-        return response.readlink()
+        return response.readlink(self)
 
     # Stateful-file calls - no need to route them as we have already created
     # a stateful object fileobj for these.

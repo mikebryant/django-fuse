@@ -31,7 +31,7 @@ class DirectoryResponse(object):
         self.count = count
         self.mode = mode
 
-    def getattr(self):
+    def getattr(self, finstance):
         st = DefaultStat()
         st.st_mode = stat.S_IFDIR | self.mode
 
@@ -46,7 +46,7 @@ class DirectoryResponse(object):
 
         return st
 
-    def readdir(self):
+    def readdir(self, finstance):
         yield fuse.Direntry('.')
         yield fuse.Direntry('..')
 
@@ -68,13 +68,13 @@ class AbstractFileResponse(object):
     def read(self):
         raise NotImplemented()
 
-    def getattr(self):
+    def getattr(self, finstance):
         raise NotImplemented()
 
     def release(self):
         pass
 
-    def open(self, flags):
+    def open(self, finstance, flags):
         accmode = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
         if (flags & accmode) != os.O_RDONLY:
             return -errno.EACCES
@@ -89,7 +89,7 @@ class FileResponse(AbstractFileResponse):
         super(FileResponse, self).__init__()
         self.contents = contents.encode('utf8')
 
-    def getattr(self):
+    def getattr(self, finstance):
         st = DefaultStat()
         st.st_mode = stat.S_IFREG | self.mode
         st.st_size = len(self.contents)
@@ -108,7 +108,7 @@ class WrappedFileResponse(AbstractFileResponse):
         self.file = os.fdopen(os.open(self.filename, flags))
         return self
 
-    def getattr(self):
+    def getattr(self, finstance):
         return os.lstat(self.filename)
 
     def read(self, length, offset):
@@ -118,17 +118,25 @@ class WrappedFileResponse(AbstractFileResponse):
     def release(self):
         self.file.close()
 
-    def fgetattr(self):
+    def fgetattr(self, finstance):
         return os.fstat(self.file.fileno())
 
 class SymlinkResponse(object):
     def __init__(self, target):
         self.target = target
 
-    def getattr(self):
+    def getattr(self, finstance):
         st = DefaultStat()
         st.st_mode = stat.S_IFLNK | 0777
         return st
 
-    def readlink(self):
+    def readlink(self, finstance):
         return self.target.encode('utf-8')
+
+class RelativeSymlinkResponse(SymlinkResponse):
+    def __init__(self, target):
+        self.target = target
+
+    def readlink(self, finstance):
+        target = os.path.normpath(os.path.join(finstance.fuse_args.mountpoint, "." + self.target))
+        return target.encode('utf-8')

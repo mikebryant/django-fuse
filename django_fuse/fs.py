@@ -45,7 +45,7 @@ def render(fn):
 
     return wrapped
 
-class DjangoOperations(LoggingMixIn, Operations):
+class DjangoOperations(Operations):
     def __init__(self, mountpoint, urlconf):
         self.mountpoint = mountpoint
         self.urlconf = urlconf
@@ -94,5 +94,10 @@ class DjangoOperations(LoggingMixIn, Operations):
         fileobj = self.fileobjs.pop(fh)
         return fileobj.release()
 
-def runfs(mountpoint, urlconf, foreground=False):
-    return FUSE(operations=DjangoOperations(mountpoint, urlconf), mountpoint=mountpoint, foreground=foreground) 
+def runfs(mountpoint, urlconf, foreground=False, verbose=False):
+    if verbose:
+        class Operations(LoggingMixIn, DjangoOperations):
+            pass
+    else:
+        Operations = DjangoOperations
+    return FUSE(operations=Operations(mountpoint, urlconf), mountpoint=mountpoint, foreground=foreground) 

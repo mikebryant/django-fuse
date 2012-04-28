@@ -21,12 +21,41 @@ import fuse
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from optparse import make_option
+from django.core.urlresolvers import resolve
 
 from django_fuse.fs import runfs
 
 class Command(BaseCommand):
+    args = '<mountpoint>'
+    option_list = BaseCommand.option_list + (
+        make_option('--foreground','-f',
+            action='store_true',
+            dest='foreground',
+            default=False,
+            help='Keep in the foreground'),
+        make_option('--urlconf','-u',
+            action='store',
+            type='string',
+            dest='urlconf',
+            default='',
+            help='Urlconf to use'),
+        )
     def handle(self, *args, **options):
-        if getattr(settings, 'FUSE_URLCONF', None) is None:
-            raise CommandError("You need to set FUSE_URLCONF to use django-fuse.")
+        urlconf = options['urlconf'] or getattr(settings, 'FUSE_URLCONF', None)
+        if not urlconf:
+            raise CommandError("You need to pass a urlconf to this command or set FUSE_URLCONF to use django-fuse.")
+        verbose = options['verbosity'] > 1
 
-        runfs(args[0], settings.FUSE_URLCONF, True)
+        if len(args) != 1:
+            raise CommandError("You need to pass one argument, the mountpoint")
+
+        try:
+            resolve('/', urlconf=urlconf)
+        except ImportError:
+            raise CommandError("Couldn't find the given urlconf")
+
+        try:
+            runfs(args[0], urlconf, verbose=verbose, foreground=options['foreground'])
+        except RuntimeError:
+            raise CommandError("Fuse error, see above")

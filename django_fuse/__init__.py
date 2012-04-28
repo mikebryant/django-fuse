@@ -20,22 +20,21 @@ import os
 import fuse
 import stat
 import errno
-
-from django_fuse.utils import DefaultStat
+from fuse import FuseOSError
 
 __all__ = ('DirectoryResponse', 'FileResponse', 'WrappedFileResponse', 'SymlinkResponse')
 
 class Response(object):
     def unlink(self, finstance):
-        return -errno.EACCES
+        raise FuseOSError(errno.EROFS)
 
     def access(self, finstance, mode):
         if mode & os.W_OK:
-            return -errno.EACCES
+            raise FuseOSError(errno.EACCES)
         return 0
 
     def rename(self, finstance, target):
-        return -errno.EACCES
+        raise FuseOSError(errno.EACCES)
 
 class DirectoryResponse(Response):
     def __init__(self, items=(), count=None, mode=0555):
@@ -44,23 +43,22 @@ class DirectoryResponse(Response):
         self.mode = mode
 
     def getattr(self, finstance):
-        st = DefaultStat()
-        st.st_mode = stat.S_IFDIR | self.mode
+        st = dict(st_mode = stat.S_IFDIR | self.mode)
 
         if self.count:
             if callable(self.count):
-                st.st_nlink = 2 + self.count()
+                st['st_nlink'] = 2 + self.count()
             else:
-                st.st_nlink = 2 + self.count
+                st['st_nlink'] = 2 + self.count
         else:
             # Set a fallback nlink
-            st.st_nlink = 1
+            st['st_nlink'] = 1
 
         return st
 
     def readdir(self, finstance):
-        yield fuse.Direntry('.')
-        yield fuse.Direntry('..')
+        yield '.'
+        yield '..'
 
         if callable(self.items):
             items = self.items()
@@ -69,19 +67,19 @@ class DirectoryResponse(Response):
 
         for name in items:
             if isinstance(name, unicode):
-                yield fuse.Direntry(name.encode('utf-8'))
+                yield name.encode('utf-8')
             else:
-                yield fuse.Direntry(name)
+                yield name
 
 class AbstractFileResponse(Response):
     def __init__(self, mode=0444):
         self.mode = mode
 
     def read(self):
-        raise NotImplemented()
+        raise FuseOSError(errno.ENOSYS)
 
     def getattr(self, finstance):
-        raise NotImplemented()
+        raise FuseOSError(errno.ENOSYS)
 
     def release(self):
         pass
@@ -89,7 +87,7 @@ class AbstractFileResponse(Response):
     def open(self, finstance, flags):
         accmode = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
         if (flags & accmode) != os.O_RDONLY:
-            return -errno.EACCES
+            raise FuseOSError(errno.EACCES)
 
         return self.get_file_obj(flags)
 
@@ -102,10 +100,11 @@ class FileResponse(AbstractFileResponse):
         self.contents = contents.encode('utf8')
 
     def getattr(self, finstance):
-        st = DefaultStat()
-        st.st_mode = stat.S_IFREG | self.mode
-        st.st_size = len(self.contents)
-        st.st_nlink = 1
+        st = dict(
+            st_mode = stat.S_IFREG | self.mode,
+            st_size = len(self.contents),
+            st_nlink = 1,
+        )
         return st
 
     def read(self, length, offset):
@@ -138,9 +137,7 @@ class SymlinkResponse(Response):
         self.target = target
 
     def getattr(self, finstance):
-        st = DefaultStat()
-        st.st_mode = stat.S_IFLNK | 0777
-        return st
+        return dict(st_mode = stat.S_IFLNK | 0777)
 
     def readlink(self, finstance):
         return self.target.encode('utf-8')
@@ -150,5 +147,5 @@ class RelativeSymlinkResponse(SymlinkResponse):
         self.target = target
 
     def readlink(self, finstance):
-        target = os.path.normpath(os.path.join(finstance.fuse_args.mountpoint, "." + self.target))
+        target = os.path.normpath(os.path.join(finstance.mountpoint, "." + self.target))
         return target.encode('utf-8')

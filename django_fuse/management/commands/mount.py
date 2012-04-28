@@ -22,23 +22,11 @@ import fuse
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from django_fuse.fs import DjangoFs
+from django_fuse.fs import runfs
 
 class Command(BaseCommand):
-    def __init__(self):
-        super(Command, self).__init__()
-        self.fs = DjangoFs(usage='%prog mount [mountpoint] [options]')
-        self.fs.parser.add_options(BaseCommand.option_list)
-
     def handle(self, *args, **options):
         if getattr(settings, 'FUSE_URLCONF', None) is None:
             raise CommandError("You need to set FUSE_URLCONF to use django-fuse.")
 
-        try:
-            self.fs.main()
-        except fuse.FuseError:
-            sys.exit(1)
-
-    def create_parser(self, prog_name, subcommand):
-        # Proxy fuse.py's parser object
-        return self.fs.parser
+        runfs(args[0], settings.FUSE_URLCONF, True)

@@ -23,8 +23,7 @@ import errno
 from django.conf import settings
 from django.core.urlresolvers import resolve, Resolver404
 
-fuse.fuse_python_api = (0, 2)
-fuse.feature_assert('stateful_files')
+from fuse import FUSE, FuseOSError, Operations, LoggingMixIn
 
 __all__ = ('DjangoFs',)
 
@@ -33,7 +32,7 @@ def render(fn):
         try:
             # Resolve requested URL to a view and "render" it.
             view_fn, view_args, view_kwargs = \
-                resolve(path, urlconf=settings.FUSE_URLCONF)
+                resolve(path, urlconf=self.urlconf)
             response = view_fn(*view_args, **view_kwargs)
 
             # Pass the response as the first argument, replacing
@@ -42,22 +41,31 @@ def render(fn):
 
         except Resolver404:
             # Path does not exist
-            return -errno.ENOENT
+            raise FuseOSError(errno.ENOENT)
 
     return wrapped
 
-class DjangoFs(fuse.Fuse):
+class DjangoOperations(LoggingMixIn, Operations):
+    def __init__(self, mountpoint, urlconf):
+        self.mountpoint = mountpoint
+        self.urlconf = urlconf
+        self.fd = 0
+        self.fileobjs = {}
+
     @render
-    def getattr(self, response):
+    def getattr(self, response, fh=None):
         return response.getattr(self)
 
     @render
-    def readdir(self, response, offset):
+    def readdir(self, response, fh=None):
         return response.readdir(self)
 
     @render
     def open(self, response, flags):
-        return response.open(self, flags)
+        obj = response.open(self, flags)
+        self.fd += 1
+        self.fileobjs[self.fd] = obj
+        return self.fd
 
     @render
     def unlink(self, response):
@@ -78,8 +86,13 @@ class DjangoFs(fuse.Fuse):
     # Stateful-file calls - no need to route them as we have already created
     # a stateful object fileobj for these.
 
-    def read(self, path, length, offset, fileobj):
+    def read(self, path, length, offset, fh):
+        fileobj = self.fileobjs[fh]
         return fileobj.read(length, offset)
 
-    def release(self, path, flags, fileobj):
+    def release(self, path, fh):
+        fileobj = self.fileobjs.pop(fh)
         return fileobj.release()
+
+def runfs(mountpoint, urlconf, foreground=False):
+    return FUSE(operations=DjangoOperations(mountpoint, urlconf), mountpoint=mountpoint, foreground=foreground) 

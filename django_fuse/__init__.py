@@ -25,15 +25,15 @@ from fuse import FuseOSError
 __all__ = ('DirectoryResponse', 'FileResponse', 'WrappedFileResponse', 'SymlinkResponse')
 
 class Response(object):
-    def unlink(self, finstance):
+    def unlink(self):
         raise FuseOSError(errno.EROFS)
 
-    def access(self, finstance, mode):
+    def access(self, mode):
         if mode & os.W_OK:
             raise FuseOSError(errno.EACCES)
         return 0
 
-    def rename(self, finstance, target):
+    def rename(self, target):
         raise FuseOSError(errno.EACCES)
 
 class DirectoryResponse(Response):
@@ -42,7 +42,7 @@ class DirectoryResponse(Response):
         self.count = count
         self.mode = mode
 
-    def getattr(self, finstance):
+    def getattr(self):
         st = dict(st_mode = stat.S_IFDIR | self.mode)
 
         if self.count:
@@ -56,7 +56,7 @@ class DirectoryResponse(Response):
 
         return st
 
-    def readdir(self, finstance):
+    def readdir(self):
         yield '.'
         yield '..'
 
@@ -78,13 +78,13 @@ class AbstractFileResponse(Response):
     def read(self):
         raise FuseOSError(errno.ENOSYS)
 
-    def getattr(self, finstance):
+    def getattr(self):
         raise FuseOSError(errno.ENOSYS)
 
     def release(self):
         pass
 
-    def open(self, finstance, flags):
+    def open(self, flags):
         accmode = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
         if (flags & accmode) != os.O_RDONLY:
             raise FuseOSError(errno.EACCES)
@@ -99,7 +99,7 @@ class FileResponse(AbstractFileResponse):
         super(FileResponse, self).__init__()
         self.contents = contents.encode('utf8')
 
-    def getattr(self, finstance):
+    def getattr(self):
         st = dict(
             st_mode = stat.S_IFREG | self.mode,
             st_size = len(self.contents),
@@ -119,7 +119,7 @@ class WrappedFileResponse(AbstractFileResponse):
         self.file = os.fdopen(os.open(self.filename, flags))
         return self
 
-    def getattr(self, finstance):
+    def getattr(self):
         return os.lstat(self.filename)
 
     def read(self, length, offset):
@@ -129,23 +129,23 @@ class WrappedFileResponse(AbstractFileResponse):
     def release(self):
         self.file.close()
 
-    def fgetattr(self, finstance):
+    def fgetattr(self):
         return os.fstat(self.file.fileno())
 
 class SymlinkResponse(Response):
     def __init__(self, target):
         self.target = target
 
-    def getattr(self, finstance):
+    def getattr(self):
         return dict(st_mode = stat.S_IFLNK | 0777)
 
-    def readlink(self, finstance):
+    def readlink(self):
         return self.target.encode('utf-8')
 
 class RelativeSymlinkResponse(SymlinkResponse):
     def __init__(self, target):
         self.target = target
 
-    def readlink(self, finstance):
-        target = os.path.normpath(os.path.join(finstance.mountpoint, "." + self.target))
+    def readlink(self):
+        target = os.path.normpath('../../../../..' + self.target)
         return target.encode('utf-8')

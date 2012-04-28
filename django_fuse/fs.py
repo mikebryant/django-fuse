@@ -54,34 +54,34 @@ class DjangoOperations(Operations):
 
     @render
     def getattr(self, response, fh=None):
-        return response.getattr(self)
+        return response.getattr()
 
     @render
     def readdir(self, response, fh=None):
-        return response.readdir(self)
+        return response.readdir()
 
     @render
     def open(self, response, flags):
-        obj = response.open(self, flags)
+        obj = response.open(flags)
         self.fd += 1
         self.fileobjs[self.fd] = obj
         return self.fd
 
     @render
     def unlink(self, response):
-        return response.unlink(self)
+        return response.unlink()
 
     @render
     def access(self, response, mode):
-        return response.access(self, mode)
+        return response.access(mode)
 
     @render
     def rename(self, response, target):
-        return response.rename(self, target)
+        return response.rename(target)
 
     @render
     def readlink(self, response):
-        return response.readlink(self)
+        return response.readlink()
 
     # Stateful-file calls - no need to route them as we have already created
     # a stateful object fileobj for these.

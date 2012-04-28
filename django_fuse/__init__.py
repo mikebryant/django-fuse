@@ -25,7 +25,19 @@ from django_fuse.utils import DefaultStat
 
 __all__ = ('DirectoryResponse', 'FileResponse', 'WrappedFileResponse', 'SymlinkResponse')
 
-class DirectoryResponse(object):
+class Response(object):
+    def unlink(self, finstance):
+        return -errno.EACCES
+
+    def access(self, finstance, mode):
+        if mode & os.W_OK:
+            return -errno.EACCES
+        return 0
+
+    def rename(self, finstance, target):
+        return -errno.EACCES
+
+class DirectoryResponse(Response):
     def __init__(self, items=(), count=None, mode=0555):
         self.items = items
         self.count = count
@@ -61,7 +73,7 @@ class DirectoryResponse(object):
             else:
                 yield fuse.Direntry(name)
 
-class AbstractFileResponse(object):
+class AbstractFileResponse(Response):
     def __init__(self, mode=0444):
         self.mode = mode
 
@@ -121,7 +133,7 @@ class WrappedFileResponse(AbstractFileResponse):
     def fgetattr(self, finstance):
         return os.fstat(self.file.fileno())
 
-class SymlinkResponse(object):
+class SymlinkResponse(Response):
     def __init__(self, target):
         self.target = target
 

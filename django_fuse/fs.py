@@ -61,17 +61,15 @@ class DjangoFs(fuse.Fuse):
 
     @render
     def unlink(self, response):
-        return -errno.EACCES
+        return response.unlink(self)
 
     @render
     def access(self, response, mode):
-        if mode & os.W_OK:
-            return -errno.EACCES
-        return 0
+        return response.access(self, mode)
 
     @render
     def rename(self, response, target):
-        return -errno.EACCES
+        return response.rename(self, target)
 
     @render
     def readlink(self, response):
